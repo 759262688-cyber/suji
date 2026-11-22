@@ -2,7 +2,7 @@
    只有通过 https 或 localhost 打开时浏览器才会启用它；局域网 http 下自动跳过，
    不影响使用。改动 index.html 之后，请把 VERSION 改成新的值，否则已安装的
    副本会继续使用旧缓存。 */
-const VERSION = 'v1-20261122';
+const VERSION = 'v2-20261122';
 const SCOPE = self.registration.scope;
 const INDEX = new URL('index.html', SCOPE).href;
 

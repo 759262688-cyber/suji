@@ -1,6 +1,140 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="速记·英二"><meta name="application-name" content="速记·英二"><meta name="format-detection" content="telephone=no,date=no,address=no,email=no"><meta name="theme-color" content="#d9d7cf" media="(prefers-color-scheme:light)"><meta name="theme-color" content="#1d1c1a" media="(prefers-color-scheme:dark)"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png"><title>速记 · 英二</title><style>/* Paper, ceramic and warm graphite. Original word-card SVGs retain their own artwork. */
+<head><meta charset="utf-8"><script id="legacy-shim">
+/* 给旧版 iPadOS（< 15.4）补上主程序要用的 API，并把启动异常记下来。
+   现代浏览器上这段全是空操作。 */
+(function () {
+  'use strict';
+  window.__bootErrors = [];
+  function note(where, err) {
+    var text = err && (err.message || err) ? String(err.message || err) : String(err);
+    if (text && window.__bootErrors.length < 8) window.__bootErrors.push(where + ': ' + text);
+  }
+  window.addEventListener('error', function (e) {
+    note('JS', e.error || e.message);
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    note('异步', e.reason);
+  });
+
+  /* structuredClone：要保住 Date（进度里全是时间字段），不能用 JSON 糊弄 */
+  if (typeof window.structuredClone !== 'function') {
+    var clone = function (v) {
+      if (v === null || typeof v !== 'object') return v;
+      if (v instanceof Date) return new Date(v.getTime());
+      if (v instanceof RegExp) return new RegExp(v.source, v.flags);
+      if (v instanceof Error) { var e2 = new Error(v.message); e2.name = v.name; return e2; }
+      if (typeof ArrayBuffer !== 'undefined') {
+        if (v instanceof ArrayBuffer) return v.slice(0);
+        if (ArrayBuffer.isView && ArrayBuffer.isView(v)) {
+          return new v.constructor(v.buffer.slice(0), v.byteOffset, v.byteLength);
+        }
+      }
+      if (typeof Map !== 'undefined' && v instanceof Map) {
+        var m = new Map();
+        v.forEach(function (val, k) { m.set(clone(k), clone(val)); });
+        return m;
+      }
+      if (typeof Set !== 'undefined' && v instanceof Set) {
+        var s = new Set();
+        v.forEach(function (val) { s.add(clone(val)); });
+        return s;
+      }
+      if (Array.isArray(v)) {
+        var a = new Array(v.length);
+        for (var i = 0; i < v.length; i++) a[i] = clone(v[i]);
+        return a;
+      }
+      var out = Object.create(Object.getPrototypeOf(v));
+      var keys = Object.keys(v);
+      for (var k = 0; k < keys.length; k++) out[keys[k]] = clone(v[keys[k]]);
+      return out;
+    };
+    window.structuredClone = function (value) { return clone(value); };
+  }
+
+  /* crypto.randomUUID */
+  if (!(window.crypto && crypto.randomUUID)) {
+    try {
+      var uuid = function () {
+        var b = new Uint8Array(16);
+        if (window.crypto && crypto.getRandomValues) crypto.getRandomValues(b);
+        else for (var i = 0; i < 16; i++) b[i] = Math.floor(Math.random() * 256);
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        var hex = '';
+        for (var j = 0; j < 16; j++) hex += (b[j] + 0x100).toString(16).slice(1);
+        return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) +
+          '-' + hex.slice(16, 20) + '-' + hex.slice(20);
+      };
+      if (window.crypto && !crypto.randomUUID) crypto.randomUUID = uuid;
+    } catch (e) {}
+  }
+
+  /* Object.hasOwn / Array.prototype.at / findLast / findLastIndex */
+  if (!Object.hasOwn) {
+    Object.defineProperty(Object, 'hasOwn', {
+      value: function (obj, key) { return Object.prototype.hasOwnProperty.call(obj, key); },
+      writable: true, configurable: true
+    });
+  }
+  if (!Array.prototype.at) {
+    Object.defineProperty(Array.prototype, 'at', {
+      value: function (n) {
+        var len = this.length >>> 0;
+        n = Math.trunc(n) || 0;
+        if (n < 0) n += len;
+        return n < 0 || n >= len ? undefined : this[n];
+      },
+      writable: true, configurable: true
+    });
+  }
+  if (!Array.prototype.findLast) {
+    Object.defineProperty(Array.prototype, 'findLast', {
+      value: function (fn, thisArg) {
+        for (var i = this.length - 1; i >= 0; i--) if (fn.call(thisArg, this[i], i, this)) return this[i];
+        return undefined;
+      },
+      writable: true, configurable: true
+    });
+  }
+  if (!Array.prototype.findLastIndex) {
+    Object.defineProperty(Array.prototype, 'findLastIndex', {
+      value: function (fn, thisArg) {
+        for (var i = this.length - 1; i >= 0; i--) if (fn.call(thisArg, this[i], i, this)) return i;
+        return -1;
+      },
+      writable: true, configurable: true
+    });
+  }
+
+  /* <dialog>：iPadOS 15.4 以前没有，用 [open] + 固定定位凑一个 */
+  var dialogOk = !!(window.HTMLDialogElement && HTMLDialogElement.prototype.querySelector &&
+    HTMLDialogElement.prototype.showModal);
+  if (!dialogOk) {
+    document.documentElement.classList.add('no-dialog');
+    var patch = function () {
+      var list = document.querySelectorAll('dialog');
+      for (var i = 0; i < list.length; i++) {
+        var d = list[i];
+        if (d.__patched) continue;
+        d.__patched = true;
+        d.showModal = function () { this.setAttribute('open', ''); };
+        d.close = function () { this.removeAttribute('open'); this.dispatchEvent(new Event('close')); };
+        try {
+          Object.defineProperty(d, 'open', {
+            get: function () { return this.hasAttribute('open'); },
+            configurable: true
+          });
+        } catch (e) {}
+      }
+    };
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', patch);
+    else patch();
+    window.__patchDialogs = patch;
+  }
+})();
+</script><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default"><meta name="apple-mobile-web-app-title" content="速记·英二"><meta name="application-name" content="速记·英二"><meta name="format-detection" content="telephone=no,date=no,address=no,email=no"><meta name="theme-color" content="#d9d7cf" media="(prefers-color-scheme:light)"><meta name="theme-color" content="#1d1c1a" media="(prefers-color-scheme:dark)"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png"><link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png"><title>速记 · 英二</title><style>/* Paper, ceramic and warm graphite. Original word-card SVGs retain their own artwork. */
 :root {
   color-scheme:light;
   --surface:#d9d7cf;--panel:#e7e3d9;--hover:#ede9df;--option-hover:#dedfd3;--pressed:#d2d0c5;
@@ -677,6 +811,56 @@ button,summary,label,[role=button],.quiz-option{-webkit-tap-highlight-color:tran
 }
 .ios-help-note{margin:.5rem 0 1rem;padding:.7em .85em;border-radius:.6em;background:var(--sage-soft);
   color:var(--sage-ink);font-size:.9rem;line-height:1.8}
+
+/* 旧系统没有 <dialog> 时，用 [open] 撑起一个模态 */
+.no-dialog dialog{display:none}
+.no-dialog dialog[open]{display:block;position:fixed;inset:0;z-index:300;margin:auto;
+  overflow:auto;background:var(--surface);padding:1.2rem;max-width:42rem;max-height:92dvh;
+  border-radius:1rem;box-shadow:0 1.25rem 4rem var(--modal-shadow)}
+.no-dialog dialog[open]::before{content:'';position:fixed;inset:0;z-index:-1;background:var(--veil)}
+
+/* 设备同步对话框 */
+.ios-sync{position:fixed;z-index:500;inset:0;display:grid;place-items:center;padding:1rem;
+  background:var(--veil);overflow:auto;overscroll-behavior:contain}
+.ios-sync[hidden]{display:none!important}
+.ios-sync-card{width:min(30em,100%);max-height:88dvh;overflow:auto;display:grid;gap:.9em;
+  padding:1.25em 1.3em;border:.0625em solid var(--line);border-radius:1em;background:var(--panel);
+  color:var(--text);box-shadow:.5em .7em 1.8em var(--modal-shadow);font-size:.85rem;line-height:1.7}
+.ios-sync-card h2{margin:0;font:500 1.2em/1.4 var(--serif)}
+.ios-sync-card h3{margin:.2em 0 0;font:600 .95em/1.5 var(--serif);color:var(--muted)}
+.ios-sync-meta{display:grid;gap:.45em;padding:.8em .9em;border-radius:.6em;background:var(--surface);
+  box-shadow:var(--field-inset)}
+.ios-sync-meta div{display:flex;align-items:baseline;justify-content:space-between;gap:.8em}
+.ios-sync-meta span{color:var(--muted)}
+.ios-sync-meta b{font-weight:600;text-align:right}
+.ios-sync-field{display:grid;gap:.3em}
+.ios-sync-field label{font-size:.92em;color:var(--muted)}
+.ios-sync-field input{min-height:2.6em;font-size:1em;padding:.45em .6em}
+.ios-sync-actions{display:flex;flex-wrap:wrap;gap:.6em}
+.ios-sync-actions button{flex:1 1 9em;min-height:2.9em;font-size:.95em;border-radius:.55em}
+.ios-sync-note{font-size:.85em;color:var(--muted)}
+.ios-sync-note code{color:var(--clay-ink);font:600 .95em ui-monospace,Consolas,monospace}
+.ios-sync-state{min-height:1.4em;font-size:.88em;color:var(--muted)}
+.ios-sync-state[data-state=ok]{color:var(--sage-ink)}
+.ios-sync-state[data-state=bad]{color:var(--clay-ink)}
+.ios-sync-foot{display:flex;justify-content:space-between;align-items:center;gap:.6em;margin-top:.2em}
+.ios-sync-foot button{min-height:2.6em;font-size:.9em;border-radius:.55em;padding:.4em .9em}
+.ios-sync-link{background:transparent;box-shadow:none;color:var(--muted);text-decoration:underline;
+  text-underline-offset:.2em;min-height:2.4em;padding:.3em}
+
+/* 「没能启动」诊断卡：只在真的起不来时出现 */
+.ios-diag{position:fixed;z-index:400;left:50%;top:50%;transform:translate(-50%,-46%);
+  width:min(30em,calc(100vw - 1.5rem));max-height:88dvh;overflow:auto;display:grid;gap:.7em;
+  padding:1.2em 1.25em;border:.0625em solid var(--line);border-radius:1em;background:var(--panel);
+  color:var(--text);box-shadow:.5em .7em 1.6em var(--shadow);font-size:.82rem;line-height:1.7}
+.ios-diag[hidden]{display:none!important}
+.ios-diag h2{margin:0;font:500 1.15em/1.4 var(--serif);color:var(--word)}
+.ios-diag p{margin:0;color:var(--muted)}
+.ios-diag ul{margin:0;padding-left:1.1em;color:var(--muted);overflow-wrap:anywhere}
+.ios-diag li{margin:.15em 0}
+.ios-diag code{font:600 .95em/1.6 ui-monospace,Consolas,monospace;color:var(--clay-ink);overflow-wrap:anywhere}
+.ios-diag-actions{display:flex;flex-wrap:wrap;gap:.6em;margin-top:.2em}
+.ios-diag-actions button{min-height:2.7em;padding:.45em 1.05em;font-size:.95em;border-radius:.55em}
 </style>
 </head>
 <body>
@@ -928,7 +1112,7 @@ button,summary,label,[role=button],.quiz-option{-webkit-tap-highlight-color:tran
   <div class="orb-stats stats"><div><span>首轮已核对</span><b id="total-done"></b></div><div><span>今日核对</span><b id="today-count"></b></div><div><span>到期复习</span><b id="due-count"></b></div><div><span>短期待巩固</span><b id="learning-count"></b></div><div class="wide"><span>近20次到期复习正确率</span><b id="recall-count"></b></div></div>
   <div class="orb-auto"><label class="orb-toggle" data-tip="打开后答对会自动换词，关闭后手动继续" for="orb-auto-next"><span>答对自动切词</span><input id="orb-auto-next" type="checkbox" role="switch" checked data-tip="关闭自动切词，答对后手动继续"></label><label class="orb-delay" for="orb-auto-next-delay"><span>等待</span><input id="orb-auto-next-delay" type="number" min="0" max="60000" step="1" value="650" inputmode="numeric" aria-label="切换前等待时间（毫秒）" required data-tip="答对后等多少毫秒再切词；填0—60000的整数，1000毫秒＝1秒"><span>毫秒</span></label></div>
   <label class="orb-toggle orb-tip-toggle" for="orb-show-tips" data-tip="打开后，鼠标停留或按Tab选中按钮时显示操作说明"><span>悬停提示</span><input id="orb-show-tips" type="checkbox" role="switch" checked data-tip="关闭按钮的操作说明；鼠标停留或按Tab选中时不再显示"></label>
-  <div class="ios-shell" id="ios-shell"><div class="ios-shell-row"><span>进度存储</span><b id="ios-storage">检测中…</b></div><div class="ios-shell-row"><span>上次备份</span><b id="ios-backup">—</b></div><div class="ios-shell-row"><span>运行方式</span><b id="ios-mode">浏览器</b></div><div class="ios-shell-actions"><button type="button" class="ios-btn" id="ios-backup-now">导出备份到「文件」</button></div></div><p id="feedback-note" class="orb-status" role="status"></p>
+  <div class="ios-shell" id="ios-shell"><div class="ios-shell-row"><span>进度存储</span><b id="ios-storage">检测中…</b></div><div class="ios-shell-row"><span>上次备份</span><b id="ios-backup">—</b></div><div class="ios-shell-row"><span>运行方式</span><b id="ios-mode">浏览器</b></div><div class="ios-shell-actions"><button type="button" class="ios-btn" id="ios-backup-now">导出备份到「文件」</button><button type="button" class="ios-btn" id="ios-sync-open">设备同步</button></div></div><p id="feedback-note" class="orb-status" role="status"></p>
 </aside>
 <button id="floating-orb" class="floating-orb" aria-label="学习进度与计时，可拖动" aria-controls="orb-menu" aria-expanded="false" data-tip="查看进度、暂停计时或设置自动切词；按住可拖动"><span class="orb-icon" aria-hidden="true"><span class="orbit-layer"><svg viewBox="0 0 48 48"><defs><linearGradient id="study-orbit-color" x1="0" y1="0" x2="1" y2="1"><stop stop-color="var(--ring-light)"/><stop offset=".4" stop-color="var(--ring-mid)"/><stop offset="1" stop-color="var(--ring-dark)"/></linearGradient></defs><g transform="translate(.18 .28)" stroke="var(--ring-shadow)" style="--surface:var(--ring-shadow)"><path d="M10.7 10.7a18.8 18.8 0 0 1 31.7 17.2M37.3 37.3A18.8 18.8 0 0 1 5.6 20.1" fill="none" stroke-width="1.5" stroke-linecap="round"/><g fill="var(--surface)" stroke="none"><circle cx="9.8" cy="11.3" r="1.65"/><circle cx="38.2" cy="36.7" r="1.65"/></g></g><g transform="translate(-.15 -.2)" stroke="var(--ring-glint)" style="--surface:var(--ring-glint)"><path d="M10.7 10.7a18.8 18.8 0 0 1 31.7 17.2M37.3 37.3A18.8 18.8 0 0 1 5.6 20.1" fill="none" stroke-width="1.5" stroke-linecap="round"/><g fill="var(--surface)" stroke="none"><circle cx="9.8" cy="11.3" r="1.65"/><circle cx="38.2" cy="36.7" r="1.65"/></g></g><g transform="translate(0 0)" stroke="url(#study-orbit-color)" style="--surface:url(#study-orbit-color)"><path d="M10.7 10.7a18.8 18.8 0 0 1 31.7 17.2M37.3 37.3A18.8 18.8 0 0 1 5.6 20.1" fill="none" stroke-width="1.5" stroke-linecap="round"/><g fill="var(--surface)" stroke="none"><circle cx="9.8" cy="11.3" r="1.65"/><circle cx="38.2" cy="36.7" r="1.65"/></g></g></svg></span><span class="core-disc"><svg class="core-status" viewBox="0 0 24 24"><path class="status-check" d="m5 12 4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><g class="status-alert"><path d="M12 5v8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/><circle cx="12" cy="18" r="1.5" fill="currentColor"/></g></svg></span></span></button><div id="toast" class="toast hidden" role="status"></div>
 <div id="control-tip" role="tooltip" popover="manual" hidden></div>
@@ -5329,6 +5513,88 @@ var VocabScheduler = (() => {
     body.insertBefore(note, body.firstChild);
   })();
 
+  /* ---------- 零之二、启动看门狗：按钮一直点不动，就说明没起来 ---------- */
+  var watcher = null, bootTicks = 0, bootShown = false;
+
+  function missingApis() {
+    var miss = [];
+    if (typeof window.structuredClone !== 'function') miss.push('structuredClone');
+    if (!(window.crypto && crypto.randomUUID)) miss.push('crypto.randomUUID');
+    if (!Object.hasOwn) miss.push('Object.hasOwn');
+    if (!Array.prototype.at) miss.push('Array.prototype.at');
+    if (typeof WebAssembly !== 'object' || typeof WebAssembly.instantiate !== 'function') miss.push('WebAssembly');
+    if (!window.indexedDB) miss.push('indexedDB');
+    return miss;
+  }
+  function uaText() {
+    var m = /iPad; CPU OS ([\d_]+)/.exec(navigator.userAgent);
+    return (m ? 'iPadOS ' + m[1].replace(/_/g, '.') : (navigator.platform || '未知设备')) +
+      (standalone ? ' · 主屏幕 App' : ' · 浏览器');
+  }
+  function showBootDiag() {
+    if (bootShown || doc.getElementById('boot-diag')) return;
+    bootShown = true;
+    var card = doc.createElement('div');
+    card.className = 'ios-diag';
+    card.id = 'boot-diag';
+    card.setAttribute('role', 'alertdialog');
+    var miss = missingApis();
+    var errs = window.__bootErrors || [];
+    var storageDead = !doc.getElementById('storage-warning').hidden;
+    var lines = [];
+    if (miss.length) lines.push('缺少功能：<code>' + miss.join('、') + '</code>');
+    if (errs.length) lines.push('报错：<code>' + String(errs[errs.length - 1]).slice(0, 150) + '</code>');
+    if (!lines.length) lines.push('没抓到具体错误，可能是浏览器把本地存储或 WebAssembly 关掉了。');
+    var head = storageDead
+      ? '读取进度失败，所以「开始」按钮是灰的、点不动。'
+      : '初始化没走完，所以按钮点了没反应。';
+    if (miss.indexOf('WebAssembly') >= 0) head += ' 这台设备似乎关掉了 WebAssembly（例如开了「锁定模式」）。';
+    card.innerHTML =
+      '<h2>这个 App 没启动起来</h2>' +
+      '<p>' + head + '</p>' +
+      '<ul>' + lines.map(function (t) { return '<li>' + t + '</li>'; }).join('') + '</ul>' +
+      '<p>系统：' + uaText() + '</p>' +
+      '<div class="ios-diag-actions">' +
+      '<button type="button" class="primary" data-copy>复制诊断信息</button>' +
+      '<button type="button" data-reload>重新加载</button>' +
+      '</div>' +
+      '<p>把复制到的内容发给我，就能定位问题。</p>';
+    doc.body.appendChild(card);
+    card.addEventListener('click', function (e) {
+      if (e.target.closest('[data-reload]')) { location.reload(); return; }
+      if (!e.target.closest('[data-copy]')) return;
+      var text = 'UA: ' + navigator.userAgent + '\n模式: ' + (standalone ? 'standalone' : 'browser') +
+        '\n缺失: ' + (miss.join(',') || '无') + '\n错误: ' + (errs.join(' | ') || '无');
+      var done = function () { e.target.textContent = '已复制'; };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(done, function () {});
+      } else {
+        var ta = doc.createElement('textarea');
+        ta.value = text;
+        doc.body.appendChild(ta);
+        ta.select();
+        try { doc.execCommand('copy'); done(); } catch (err) {}
+        ta.remove();
+      }
+    });
+  }
+  function watchBoot() {
+    if (bootShown) return;
+    var button = doc.getElementById('continue');
+    var card = doc.getElementById('word-content');
+    var title = doc.getElementById('empty-title');
+    if (!button) return;
+    if (!button.disabled || (card && !card.hidden)) {          // 已经能用了
+      clearInterval(watcher); watcher = null; return;
+    }
+    if (title && title.textContent === '今日完成') {            // 今天背完了，按钮本来就该灰
+      clearInterval(watcher); watcher = null; return;
+    }
+    if (missingApis().length) { showBootDiag(); return; }       // 已经知道原因
+    if (++bootTicks >= 18) { clearInterval(watcher); watcher = null; showBootDiag(); }
+  }
+  watcher = setInterval(watchBoot, 1000);
+
   /* ---------- 一、长按显示操作说明（iPad 没有悬停） ---------- */
   var tipEl = doc.getElementById('control-tip');
   var holdTimer = null, tipHideTimer = null, swallowClick = false, startPt = null;
@@ -5454,6 +5720,7 @@ var VocabScheduler = (() => {
   var exportBtn = doc.getElementById('export');
   if (exportBtn) {
     exportBtn.addEventListener('click', function () {
+      if (window.__y2syncCapture) return;          // 同步时的内部导出不算「备份」
       LS.set('y2.backupAt', String(Date.now()));
       setTimeout(paint, 50);
     }, true);
@@ -5535,6 +5802,407 @@ var VocabScheduler = (() => {
   window.addEventListener('orientationchange', function () {
     setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 320);
   });
+
+  /* ---------- 八、设备同步：加密快照存进 GitHub 仓库 ---------- */
+  (function () {
+    var OWNER = '759262688-cyber', REPO = 'suji', FILE = 'sync.json', BRANCH = 'main';
+    var K = function (n) { return 'y2sync.' + n; };
+    var get = function (n, dflt) { var v = LS.get(K(n)); return v == null ? dflt : v; };
+    var set = function (n, v) { LS.set(K(n), v); };
+
+    function b64enc(bytes) {
+      var s = '', i;
+      for (i = 0; i < bytes.length; i += 0x8000) {
+        s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      }
+      return btoa(s);
+    }
+    function b64dec(text) {
+      var s = atob(text), out = new Uint8Array(s.length), i;
+      for (i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+      return out;
+    }
+    var TE = new TextEncoder(), TD = new TextDecoder();
+    function cryptoReady() { return !!(window.crypto && crypto.subtle && crypto.subtle.importKey); }
+
+    function keyFor(pass, salt) {
+      return crypto.subtle.importKey('raw', TE.encode(pass), 'PBKDF2', false, ['deriveKey'])
+        .then(function (base) {
+          return crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt: salt, iterations: 120000, hash: 'SHA-256' },
+            base, { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+        });
+    }
+    function seal(plain, pass) {
+      var salt = crypto.getRandomValues(new Uint8Array(16));
+      var iv = crypto.getRandomValues(new Uint8Array(12));
+      return keyFor(pass, salt).then(function (key) {
+        return crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, TE.encode(plain));
+      }).then(function (ct) {
+        return { v: 1, salt: b64enc(salt), iv: b64enc(iv), data: b64enc(new Uint8Array(ct)) };
+      });
+    }
+    function unseal(box, pass) {
+      return keyFor(pass, b64dec(box.salt)).then(function (key) {
+        return crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64dec(box.iv) }, key, b64dec(box.data));
+      }).then(function (pt) { return TD.decode(pt); });
+    }
+
+    /* 借「导出进度」把当前状态抓成字符串（不真的下载文件） */
+    function captureState() {
+      return new Promise(function (resolve, reject) {
+        var grabbed = null, finished = false;
+        var realCreate = URL.createObjectURL, realRevoke = URL.revokeObjectURL;
+        var timer = setTimeout(function () { finish(Error('导出没有响应')); }, 10000);
+        function finish(err) {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          URL.createObjectURL = realCreate;
+          URL.revokeObjectURL = realRevoke;
+          window.__y2syncCapture = false;
+          if (err) reject(err); else resolve(grabbed);
+        }
+        window.__y2syncCapture = true;
+        URL.createObjectURL = function (blob) {
+          if (blob && blob.type === 'application/json' && typeof blob.text === 'function') {
+            blob.text().then(function (t) { grabbed = t; finish(); },
+              function () { finish(Error('读取进度失败')); });
+            return 'blob:y2sync';
+          }
+          return realCreate.call(URL, blob);
+        };
+        URL.revokeObjectURL = function (u) {
+          if (u !== 'blob:y2sync') { try { realRevoke.call(URL, u); } catch (e) {} }
+        };
+        var b = doc.getElementById('export');
+        if (!b) { finish(Error('找不到导出按钮')); return; }
+        try { b.click(); } catch (e) { finish(e); }
+      });
+    }
+
+    /* 借「导入进度」把字符串喂回去，走的是 App 自己的校验和替换 */
+    function restoreState(text) {
+      return new Promise(function (resolve, reject) {
+        var input = doc.getElementById('import-file');
+        if (!input) { reject(Error('找不到导入入口')); return; }
+        var dt;
+        try { dt = new DataTransfer(); dt.items.add(new File([text], 'sync.json',
+          { type: 'application/json' })); } catch (e) { dt = null; }
+        if (!dt) { reject(Error('这个浏览器不支持一键导入')); return; }
+        try {
+          input.files = dt.files;
+        } catch (e) { reject(Error('这个浏览器不支持一键导入')); return; }
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+        resolve();
+      });
+    }
+
+    function localHead() {
+      return new Promise(function (resolve) {
+        var read = function () {
+          var req = indexedDB.open('english-ii-fsrs7.idb');
+          req.onerror = function () { resolve(null); };
+          req.onsuccess = function () {
+            var db = req.result;
+            try {
+              var tx = db.transaction(['meta', 'cards'], 'readonly');
+              var head = tx.objectStore('meta').get('head');
+              var cards = tx.objectStore('cards').count();
+              tx.oncomplete = function () {
+                var v = head.result ? { revision: head.result.revision, savedAt: head.result.savedAt } : null;
+                if (v) v.cards = cards.result;
+                try { db.close(); } catch (e) {}
+                resolve(v);
+              };
+              tx.onerror = function () { try { db.close(); } catch (e) {} resolve(null); };
+            } catch (e) { try { db.close(); } catch (e2) {} resolve(null); }
+          };
+        };
+        try {
+          if (indexedDB.databases) {
+            indexedDB.databases().then(function (list) {
+              var found = (list || []).some(function (d) { return d && d.name === 'english-ii-fsrs7.idb'; });
+              if (found) read(); else resolve(null);
+            }, read);
+          } else read();
+        } catch (e) { resolve(null); }
+      });
+    }
+
+    function apiUrl() {
+      return 'https://api.github.com/repos/' + OWNER + '/' + REPO + '/contents/' + FILE;
+    }
+    function fetchRemote() {
+      var token = get('token', '');
+      var headers = { Accept: 'application/vnd.github+json' };
+      if (token) headers.Authorization = 'Bearer ' + token;
+      return fetch(apiUrl() + '?t=' + Date.now(), { headers: headers, cache: 'no-store' })
+        .then(function (res) {
+          if (res.status === 404) return null;
+          if (res.status === 401) throw Error('令牌无效或已过期');
+          if (res.status === 403) throw Error('令牌权限不够（要 public_repo）或接口被限流');
+          if (!res.ok) throw Error('读取云端失败：' + res.status);
+          return res.json().then(function (data) {
+            var text = TD.decode(b64dec((data.content || '').replace(/\s/g, '')));
+            return { sha: data.sha, box: JSON.parse(text) };
+          });
+        });
+    }
+    function pushRemote(plain) {
+      var token = get('token', ''), pass = get('pass', '');
+      if (!token) throw Error('先填访问令牌');
+      if (!pass) throw Error('先设一个同步口令');
+      return seal(plain, pass).then(function (box) {
+        box.at = Date.now();                    // 外层留一份「谁、什么时候」的线索
+        box.dev = deviceName();
+        return fetchRemote().catch(function () { return null; }).then(function (cur) {
+          var body = {
+            message: 'sync ' + new Date().toISOString(),
+            content: b64enc(TE.encode(JSON.stringify(box))),
+            branch: BRANCH
+          };
+          if (cur && cur.sha) body.sha = cur.sha;
+          return fetch(apiUrl(), {
+            method: 'PUT',
+            headers: {
+              Authorization: 'Bearer ' + token,
+              Accept: 'application/vnd.github+json',
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(body)
+          });
+        });
+      }).then(function (res) {
+        if (res.status === 409) throw Error('云端刚被另一台设备更新，先「刷新云端」再传');
+        if (res.status === 401 || res.status === 403) throw Error('令牌没有写入权限');
+        if (!res.ok) throw Error('上传失败：' + res.status);
+        return true;
+      });
+    }
+
+    function fmtTime(ms) {
+      if (!ms) return '—';
+      var d = new Date(ms), n = new Date();
+      var hm = ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2);
+      if (d.toDateString() === n.toDateString()) return '今天 ' + hm;
+      return (d.getMonth() + 1) + '月' + d.getDate() + '日 ' + hm;
+    }
+    function deviceName() {
+      var ua = navigator.userAgent;
+      if (/iPad/.test(ua) || (/Macintosh/.test(ua) && 'ontouchend' in doc)) return 'iPad';
+      if (/Android/.test(ua)) return '手机';
+      if (/iPhone/.test(ua)) return 'iPhone';
+      return '电脑';
+    }
+
+    var ui = null;
+    function build() {
+      if (doc.getElementById('ios-sync')) { ui = doc.getElementById('ios-sync'); return; }
+      var wrap = doc.createElement('div');
+      wrap.className = 'ios-sync';
+      wrap.id = 'ios-sync';
+      wrap.hidden = true;
+      wrap.innerHTML = [
+        '<div class="ios-sync-card" role="dialog" aria-label="设备同步">',
+        '<h2>设备同步</h2>',
+        '<p class="ios-sync-note">进度先加密，再存到你 GitHub 仓库的 <code>sync.json</code>。',
+        '两台设备填同一个口令，各自「上传 / 拉取」一次就能对齐。</p>',
+        '<div class="ios-sync-meta">',
+        '<div><span>本机</span><b id="sync-local">—</b></div>',
+        '<div><span>云端</span><b id="sync-remote">—</b></div>',
+        '</div>',
+        '<div class="ios-sync-field"><label for="sync-pass">同步口令（两台设备必须一样，忘了就只能手动传文件）</label>',
+        '<input id="sync-pass" type="password" autocomplete="off" spellcheck="false" placeholder="至少 6 位"></div>',
+        '<div class="ios-sync-field"><label for="sync-token">GitHub 访问令牌（只存在这台设备上）</label>',
+        '<input id="sync-token" type="password" autocomplete="off" spellcheck="false" placeholder="ghp_..."></div>',
+        '<div class="ios-sync-actions">',
+        '<button type="button" data-act="save">保存设置</button>',
+        '<button type="button" data-act="refresh">刷新云端</button>',
+        '</div>',
+        '<div class="ios-sync-actions">',
+        '<button type="button" class="primary" data-act="pull">拉取云端覆盖本机</button>',
+        '<button type="button" class="primary" data-act="push">上传本机到云端</button>',
+        '</div>',
+        '<div class="ios-sync-state" id="sync-state" role="status"></div>',
+        '<p class="ios-sync-note">这是「整份替换」，不是合并：两边分别背过不同的词时，被覆盖的那边会丢。',
+        '拿不准就先点圆球里的「导出备份到「文件」」。</p>',
+        '<div class="ios-sync-foot">',
+        '<button type="button" class="ios-sync-link" data-act="undo" hidden>撤销上次拉取</button>',
+        '<button type="button" data-act="close">关闭</button>',
+        '</div>',
+        '</div>'
+      ].join('');
+      doc.body.appendChild(wrap);
+      ui = wrap;
+      wrap.addEventListener('click', function (e) {
+        if (e.target === wrap) { close(); return; }
+        var b = e.target.closest('[data-act]');
+        if (b) act(b.dataset.act, b);
+      });
+    }
+
+    function state(text, kind) {
+      var el = doc.getElementById('sync-state');
+      if (!el) return;
+      el.textContent = text || '';
+      if (kind) el.dataset.state = kind; else delete el.dataset.state;
+    }
+    function setMeta(which, text) {
+      var el = doc.getElementById('sync-' + which);
+      if (el) el.textContent = text;
+    }
+    function refreshLocal() {
+      return localHead().then(function (head) {
+        if (!head) { setMeta('local', '还没存过进度'); return; }
+        setMeta('local', fmtTime(head.savedAt) + ' · ' + (head.cards || 0) + ' 词 · ' + deviceName());
+      });
+    }
+    function boxSummary(json) {
+      try {
+        var s = JSON.parse(json);
+        return {
+          savedAt: s.savedAt || null,
+          cards: s.cards ? Object.keys(s.cards).length : 0,
+          events: (s.events || []).length
+        };
+      } catch (e) { return null; }
+    }
+    function refreshRemote() {
+      var pass = get('pass', '');
+      setMeta('remote', '读取中…');
+      return fetchRemote().then(function (remote) {
+        if (!remote) { setMeta('remote', '还没有云端副本'); return null; }
+        var who = (remote.box.dev || '?') + ' · ' + fmtTime(remote.box.at);
+        if (!pass) { setMeta('remote', who + '（填口令后可看词数）'); return null; }
+        return unseal(remote.box, pass).then(function (plain) {
+          var info = boxSummary(plain);
+          if (!info) { setMeta('remote', '副本无法解析'); return null; }
+          setMeta('remote', fmtTime(info.savedAt || remote.box.at) + ' · ' + info.cards + ' 词 · ' + (remote.box.dev || '?'));
+          return { plain: plain, info: info };
+        }, function () {
+          setMeta('remote', '口令不对，解不开');
+          return null;
+        });
+      }, function (err) {
+        setMeta('remote', '读取失败');
+        state(err.message, 'bad');
+        return null;
+      });
+    }
+
+    function act(name, button) {
+      if (name === 'close') { close(); return; }
+      if (name === 'save') {
+        set('pass', doc.getElementById('sync-pass').value.trim());
+        set('token', doc.getElementById('sync-token').value.trim());
+        state('已保存到这台设备', 'ok');
+        refreshRemote();
+        return;
+      }
+      if (!cryptoReady()) {
+        state('同步需要 https 网址（现在这个地址不行）', 'bad');
+        return;
+      }
+      if (name === 'refresh') { state(''); refreshRemote(); return; }
+      if (name === 'undo') {
+        var prev = get('prev', '');
+        if (!prev) { state('没有可撤销的快照', 'bad'); return; }
+        button.disabled = true;
+        state('正在恢复…');
+        restoreState(prev).then(function () {
+          return waitChange();
+        }).then(function () {
+          set('prev', '');
+          button.hidden = true;
+          state('已恢复到拉取前的本机进度', 'ok');
+          refreshLocal();
+          button.disabled = false;
+        }, function (err) {
+          state(err.message, 'bad');
+          button.disabled = false;
+        });
+        return;
+      }
+
+      button.disabled = true;
+      state(name === 'push' ? '正在读取本机进度…' : '正在读取云端副本…');
+      var job;
+      if (name === 'push') {
+        job = captureState().then(function (plain) {
+          state('正在加密并上传…');
+          return pushRemote(plain).then(function () {
+            state('已上传（' + fmtTime(Date.now()) + '）', 'ok');
+            refreshLocal();
+            refreshRemote();
+          });
+        });
+      } else {
+        var pass = get('pass', '');
+        if (!pass) { state('先填口令并「保存设置」', 'bad'); button.disabled = false; return; }
+        job = fetchRemote().then(function (remote) {
+          if (!remote) throw Error('云端还没有副本，请先在另一台设备上「上传本机」');
+          return unseal(remote.box, pass).then(function (plain) {
+            var info = boxSummary(plain);
+            if (!info) throw Error('云端副本格式不对');
+            state('正在备份本机并导入…');
+            return captureState().then(function (prev) {
+              set('prev', prev);
+              var undo = doc.querySelector('[data-act="undo"]');
+              if (undo) undo.hidden = false;
+              return localHead().then(function (before) {
+                return restoreState(plain).then(function () {
+                  return waitChange(before ? before.revision : null);
+                }).then(function () {
+                  state('已用云端副本覆盖本机（' + fmtTime(info.savedAt) + '）', 'ok');
+                  refreshLocal();
+                });
+              });
+            });
+          });
+        });
+      }
+      job.then(function () { button.disabled = false; }, function (err) {
+        state(err && err.message ? err.message : '操作失败', 'bad');
+        button.disabled = false;
+      });
+    }
+
+    function waitChange(beforeRevision) {
+      var tries = 0;
+      return new Promise(function (resolve) {
+        var tick = function () {
+          localHead().then(function (head) {
+            if (tries++ > 30) { resolve(); return; }
+            if (head && head.revision !== beforeRevision) { resolve(); return; }
+            setTimeout(tick, 200);
+          });
+        };
+        setTimeout(tick, 300);
+      });
+    }
+
+    function open() {
+      build();
+      if (!ui) return;
+      ui.hidden = false;
+      hideTip();
+      doc.getElementById('sync-pass').value = get('pass', '');
+      doc.getElementById('sync-token').value = get('token', '');
+      var undo = doc.querySelector('[data-act="undo"]');
+      if (undo) undo.hidden = !get('prev', '');
+      state(cryptoReady() ? '' : '当前地址不是 https，同步用不了（用 github.io 那个网址）',
+        cryptoReady() ? null : 'bad');
+      refreshLocal();
+      refreshRemote();
+    }
+    function close() { if (ui) ui.hidden = true; }
+
+    var entry = doc.getElementById('ios-sync-open');
+    if (entry) entry.addEventListener('click', function (e) { e.preventDefault(); open(); });
+    window.Y2Sync = { captureState: captureState, restoreState: restoreState, seal: seal,
+      unseal: unseal, localHead: localHead, boxSummary: boxSummary, cryptoReady: cryptoReady };
+  })();
 
   /* ---------- 七、Service Worker：装到主屏后可离线打开 ---------- */
   if ('serviceWorker' in navigator &&
