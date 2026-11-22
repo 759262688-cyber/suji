@@ -6154,7 +6154,7 @@ var VocabScheduler = (() => {
                 return restoreState(plain).then(function () {
                   return waitChange(before ? before.revision : null);
                 }).then(function () {
-                  state('已用云端副本覆盖本机（' + fmtTime(info.savedAt) + '）', 'ok');
+                  state('已用云端副本覆盖本机（' + fmtTime(info.savedAt || remote.box.at) + '）', 'ok');
                   refreshLocal();
                 });
               });
